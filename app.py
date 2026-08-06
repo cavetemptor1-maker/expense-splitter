@@ -92,7 +92,7 @@ paid_options = ["S", "A"]
 def_paid_idx = paid_options.index(edit_item["paidBy"]) if edit_item and edit_item["paidBy"] in paid_options else 0
 
 # The Form
-with st.form("expense_form", clear_submit=True):
+with st.form("expense_form", clear_on_submit=True):
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
         name = st.text_input("Item Name", value=def_name, placeholder="e.g. Milk")
