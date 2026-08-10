@@ -160,12 +160,17 @@ for exp in st.session_state.expenses:
     except:
         amt = 0.0
 
-    if exp["paidBy"] == "S": total_paid_s += amt
-    if exp["paidBy"] == "A": total_paid_a += amt
+    if exp["paidBy"] == "S":
+        total_paid_s += amt
+    if exp["paidBy"] == "A":
+        total_paid_a += amt
     
-    if exp["category"] == "grocery": groc_sum += amt
-    elif exp["category"] == "personalS": pers_s_sum += amt
-    elif exp["category"] == "personalA": pers_a_sum += amt
+    if exp["category"] == "grocery":
+        groc_sum += amt
+    elif exp["category"] == "personalS":
+        pers_s_sum += amt
+    elif exp["category"] == "personalA":
+        pers_a_sum += amt
 
 def render_expense_item(exp):
     try:
