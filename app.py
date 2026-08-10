@@ -35,20 +35,31 @@ def load_expenses():
         req = requests.get(f"{BASE_URL}/latest", headers=HEADERS)
         if req.status_code == 200:
             data = req.json()
-            return data.get("record", [])
+            record = data.get("record", [])
+            # अगर डेटा डिक्शनरी फॉर्मेट में सेव हो गया है, तो उसे लिस्ट में बदलें
+            if isinstance(record, dict):
+                return record.get("expenses", [])
+            elif isinstance(record, list):
+                return record
         return []
     except:
         return []
 
 def save_expenses(expenses):
     try:
-        requests.put(BASE_URL, json=expenses, headers=HEADERS)
+        # JSONBin में हमेशा डिक्शनरी के रूप में सेव करें ताकि 'Blank' एरर न आए
+        payload = {"expenses": expenses}
+        requests.put(BASE_URL, json=payload, headers=HEADERS)
     except Exception as e:
         st.error(f"Error saving to JSONBin: {e}")
 
 # --- Session State Init ---
 if "expenses" not in st.session_state:
     st.session_state.expenses = load_expenses()
+    # सुरक्षा के लिए (Failsafe check)
+    if not isinstance(st.session_state.expenses, list):
+        st.session_state.expenses = []
+        
 if "edit_id" not in st.session_state:
     st.session_state.edit_id = None
 
@@ -73,10 +84,10 @@ st.markdown("---")
 # --- Add/Edit Form Section ---
 edit_item = None
 if st.session_state.edit_id:
-    edit_item = next((e for e in st.session_state.expenses if e["id"] == st.session_state.edit_id), None)
+    edit_item = next((e for e in st.session_state.expenses if e.get("id") == st.session_state.edit_id), None)
     col_t1, col_t2 = st.columns([4, 1])
     with col_t1:
-        st.markdown(f"### ✏️ Update Expense: {edit_item['name'] if edit_item else ''}")
+        st.markdown(f"### ✏️ Update Expense: {edit_item.get('name', '') if edit_item else ''}")
     with col_t2:
         if st.button("❌ Cancel Edit"):
             st.session_state.edit_id = None
@@ -84,21 +95,21 @@ if st.session_state.edit_id:
 else:
     st.markdown("### ➕ Add New Expense")
 
-def_name = edit_item["name"] if edit_item else ""
-def_amount = float(edit_item["amount"]) if edit_item else 0.0
+def_name = edit_item.get("name", "") if edit_item else ""
+def_amount = float(edit_item.get("amount", 0.0)) if edit_item else 0.0
 
 def_date = datetime.today().date()
-if edit_item:
+if edit_item and "date" in edit_item:
     try:
         def_date = datetime.strptime(edit_item["date"], "%Y-%m-%d").date()
     except:
         pass
 
 cat_options = ["grocery", "personalS", "personalA"]
-def_cat_idx = cat_options.index(edit_item["category"]) if edit_item and edit_item["category"] in cat_options else 0
+def_cat_idx = cat_options.index(edit_item["category"]) if edit_item and edit_item.get("category") in cat_options else 0
 
 paid_options = ["S", "A"]
-def_paid_idx = paid_options.index(edit_item["paidBy"]) if edit_item and edit_item["paidBy"] in paid_options else 0
+def_paid_idx = paid_options.index(edit_item["paidBy"]) if edit_item and edit_item.get("paidBy") in paid_options else 0
 
 with st.form("expense_form", clear_on_submit=True):
     c1, c2, c3, c4, c5 = st.columns(5)
@@ -123,7 +134,7 @@ with st.form("expense_form", clear_on_submit=True):
         else:
             if edit_item:
                 for exp in st.session_state.expenses:
-                    if exp["id"] == st.session_state.edit_id:
+                    if exp.get("id") == st.session_state.edit_id:
                         exp["name"] = name
                         exp["amount"] = float(amount)
                         exp["date"] = str(date)
@@ -155,50 +166,56 @@ groc_sum, pers_s_sum, pers_a_sum = 0.0, 0.0, 0.0
 total_paid_s, total_paid_a = 0.0, 0.0
 
 for exp in st.session_state.expenses:
+    # अगर कोई गलत एंट्री आ जाए, तो ऐप क्रैश नहीं होगा
+    if not isinstance(exp, dict):
+        continue
+        
     try:
-        amt = float(exp["amount"])
+        amt = float(exp.get("amount", 0.0))
     except:
         amt = 0.0
 
-    if exp["paidBy"] == "S":
+    if exp.get("paidBy") == "S":
         total_paid_s += amt
-    if exp["paidBy"] == "A":
+    if exp.get("paidBy") == "A":
         total_paid_a += amt
     
-    if exp["category"] == "grocery":
+    if exp.get("category") == "grocery":
         groc_sum += amt
-    elif exp["category"] == "personalS":
+    elif exp.get("category") == "personalS":
         pers_s_sum += amt
-    elif exp["category"] == "personalA":
+    elif exp.get("category") == "personalA":
         pers_a_sum += amt
 
 def render_expense_item(exp):
+    if not isinstance(exp, dict): return
+    
     try:
-        amt = float(exp["amount"])
+        amt = float(exp.get("amount", 0.0))
     except:
         amt = 0.0
 
     st.markdown(f"""
         <div class="item-card">
-            <b>{exp['name']}</b> - ₹{amt:.2f}<br>
-            <small>Paid by {exp['paidBy']} | 📅 {exp['date']}</small>
+            <b>{exp.get('name', 'Unknown')}</b> - ₹{amt:.2f}<br>
+            <small>Paid by {exp.get('paidBy', 'Unknown')} | 📅 {exp.get('date', 'Unknown')}</small>
         </div>
     """, unsafe_allow_html=True)
     
-    with st.expander(f"⚙️ Manage '{exp['name']}'"):
-        pwd = st.text_input("Password (1307):", type="password", key=f"pwd_{exp['id']}")
+    with st.expander(f"⚙️ Manage '{exp.get('name', 'Unknown')}'"):
+        pwd = st.text_input("Password (1307):", type="password", key=f"pwd_{exp.get('id')}")
         bc1, bc2 = st.columns(2)
         with bc1:
-            if st.button("✏️ Edit", key=f"edit_{exp['id']}"):
+            if st.button("✏️ Edit", key=f"edit_{exp.get('id')}"):
                 if pwd == "1307":
-                    st.session_state.edit_id = exp['id']
+                    st.session_state.edit_id = exp.get('id')
                     st.rerun()
                 else:
                     st.error("Wrong Password!")
         with bc2:
-            if st.button("🗑️ Delete", key=f"del_{exp['id']}"):
+            if st.button("🗑️ Delete", key=f"del_{exp.get('id')}"):
                 if pwd == "1307":
-                    st.session_state.expenses = [e for e in st.session_state.expenses if str(e["id"]) != str(exp["id"])]
+                    st.session_state.expenses = [e for e in st.session_state.expenses if str(e.get("id")) != str(exp.get("id"))]
                     save_expenses(st.session_state.expenses)
                     st.rerun()
                 else:
@@ -206,7 +223,7 @@ def render_expense_item(exp):
 
 with col_groc:
     st.markdown("### 🛒 Grocery Items")
-    for exp in [e for e in st.session_state.expenses if e["category"] == "grocery"]:
+    for exp in [e for e in st.session_state.expenses if isinstance(e, dict) and e.get("category") == "grocery"]:
         render_expense_item(exp)
     
     st.markdown(f"""
@@ -221,11 +238,11 @@ with col_groc:
 with col_pers:
     st.markdown("### 💼 Personal Expenses")
     st.markdown("<b>👤 Personal of S</b>", unsafe_allow_html=True)
-    for exp in [e for e in st.session_state.expenses if e["category"] == "personalS"]:
+    for exp in [e for e in st.session_state.expenses if isinstance(e, dict) and e.get("category") == "personalS"]:
         render_expense_item(exp)
 
     st.markdown("<br><b>👤 Personal of A</b>", unsafe_allow_html=True)
-    for exp in [e for e in st.session_state.expenses if e["category"] == "personalA"]:
+    for exp in [e for e in st.session_state.expenses if isinstance(e, dict) and e.get("category") == "personalA"]:
         render_expense_item(exp)
 
     st.markdown(f"""
